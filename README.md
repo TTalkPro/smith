@@ -5,8 +5,9 @@ C# TUI PostgreSQL 数据库管理工具，专注于迁移管理。
 ## 技术栈
 
 - C# / .NET 10.0
-- **Terminal.Gui v2.0.0** (TUI 渲染) - AOT 兼容
-- **System.CommandLine** (CLI 框架) - Microsoft 官方，- Npgsql 10.0.1（PostgreSQL 驱动）
+- **System.CommandLine** (CLI 框架) - Microsoft 官方
+- **Npgsql 10.0.1**（PostgreSQL 驱动）
+- **Native AOT** 编译，生成原生二进制
 - xUnit + FluentAssertions + Moq（测试）
 
 ## 安装
@@ -32,31 +33,45 @@ dotnet run --project src/Smith -- --help
 
 ### 构建独立二进制（Linux）
 
-Smith 支持构建独立的单文件二进制，无需 .NET Runtime 即可运行。
+Smith 支持两种构建模式，均无需目标机器安装 .NET Runtime。
 
 **前置要求：**
 - .NET 10.0 SDK
 - Linux x64 系统
 
-**构建步骤：**
+#### Native AOT 构建（推荐）
+
+编译为原生机器码，体积小、启动快。
+
 ```bash
-# 执行构建脚本
 ./build-linux-aot.sh
 
 # 生成的二进制文件位于
-publish/linux-x64/smith
+publish/linux-x64/smith    # ~11 MB
 
 # 安装到系统（可选）
 sudo cp publish/linux-x64/smith /usr/local/bin/
-smith --help
 ```
 
-**构建优势：**
-- 独立单文件二进制，无需安装 .NET Runtime
-- 包含所有依赖（.NET Runtime、 NPGSQL等）
-- 一次构建，跨环境运行（Linux x64）
-- 二进制大小约 106MB
-- **AOT 兼容**: 使用 Terminal.Gui + System.CommandLine， 支持 AOT 编译
+#### Self-Contained 构建
+
+打包完整 .NET 运行时，兼容性更好，但体积较大。
+
+```bash
+./build-linux-contained.sh
+
+# 生成的二进制文件位于
+publish/linux-x64/smith    # ~74 MB
+```
+
+**两种模式对比：**
+
+| | Native AOT | Self-Contained |
+|---|---|---|
+| 二进制大小 | ~11 MB | ~74 MB |
+| 启动速度 | 极快（无 JIT） | 较慢（JIT 预热） |
+| 运行时依赖 | 无 | 无 |
+| 构建脚本 | `build-linux-aot.sh` | `build-linux-contained.sh` |
 
 ## 快速开始
 

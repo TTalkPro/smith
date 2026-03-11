@@ -1,10 +1,10 @@
 #!/bin/bash
-# Smith - Linux AOT Build Script
-# Builds a native Linux x64 binary using .NET AOT compilation
+# Smith - Linux Self-Contained Build Script
+# Builds a self-contained Linux x64 binary with bundled .NET runtime
 
 set -e  # Exit on error
 
-echo "=== Smith Linux AOT Build ==="
+echo "=== Smith Linux Self-Contained Build ==="
 echo ""
 
 # Configuration
@@ -41,15 +41,17 @@ echo -e "${YELLOW}Restoring dependencies...${NC}"
 dotnet restore "$PROJECT_PATH"
 echo ""
 
-# Build and publish with Native AOT
-echo -e "${YELLOW}Building Native AOT binary for $RUNTIME...${NC}"
+# Build and publish self-contained (no trimming, works with Spectre.Console.Cli)
+echo -e "${YELLOW}Building self-contained binary for $RUNTIME...${NC}"
 dotnet publish "$PROJECT_PATH" \
     --runtime "$RUNTIME" \
     --configuration "$CONFIGURATION" \
     --output "$OUTPUT_DIR" \
+    --self-contained true \
+    -p:PublishSingleFile=true \
+    -p:IncludeNativeLibrariesForSelfExtract=true \
     -p:DebugType=none \
-    -p:DebugSymbols=false \
-    -p:StripSymbols=true
+    -p:DebugSymbols=false
 
 echo ""
 

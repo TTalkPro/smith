@@ -8,11 +8,22 @@
     <RootNamespace>Smith</RootNamespace>
     <AssemblyName>smith</AssemblyName>
     <Version>0.1.0</Version>
+
+    <!-- AOT & Trimming -->
+    <PublishAot>true</PublishAot>
+    <OptimizationPreference>Size</OptimizationPreference>
+    <IlcGenerateStackTraceData>false</IlcGenerateStackTraceData>
+    <StackTraceSupport>false</StackTraceSupport>
+
+    <!-- Remove ICU globalization data (~25 MB savings) -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+
+    <!-- Strip satellite assemblies for unused languages -->
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="System.CommandLine" Version="2.0.4" />
-    <PackageReference Include="Terminal.Gui" Version="2.0.0" />
     <PackageReference Include="Npgsql" Version="10.0.1" />
     <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.0" />

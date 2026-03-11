@@ -1,5 +1,3 @@
-using Spectre.Console.Cli;
-using Smith.Commands.Settings;
 using Smith.Configuration;
 using Smith.Database;
 using Smith.Migration;
@@ -7,23 +5,16 @@ using Smith.Rendering;
 
 namespace Smith.Commands.Database;
 
-public class RebuildCommand : AsyncCommand<RebuildCommand.Settings>
+public static class RebuildCommand
 {
-    public class Settings : ConnectionSettings
+    public static async Task<int> ExecuteAsync(
+        string? database, string? host, int? port, string? user, string? password,
+        string? databasePath, bool verbose, bool seed, bool examples, bool force)
     {
-        [CommandOption("-s|--seed")]
-        public bool Seed { get; set; }
-
-        [CommandOption("-e|--examples")]
-        public bool Examples { get; set; }
-
-        [CommandOption("-f|--force")]
-        public bool Force { get; set; }
-    }
-
-    public override async Task<int> ExecuteAsync(CommandContext context, Settings settings)
-    {
-        var config = settings.BuildConfig();
+        var config = ConfigLoader.Load(cliHost: host, cliPort: port, cliUser: user,
+            cliPassword: password, cliDatabase: database, cliDatabasePath: databasePath,
+            cliVerbose: verbose);
+        
         if (string.IsNullOrEmpty(config.Database))
         {
             Console.Error.WriteLine("错误: 请通过 -d 参数或 SMITH_DATABASE 环境变量指定数据库名称");
@@ -31,10 +22,10 @@ public class RebuildCommand : AsyncCommand<RebuildCommand.Settings>
         }
 
         SmithConfig.ValidateDatabaseName(config.Database);
-        var renderer = new SpectreRenderer();
+        var renderer = new TerminalGuiRenderer();
         renderer.Title("Smith - 重建数据库");
 
-        if (!settings.Force)
+        if (!force)
         {
             Console.Write($"即将删除并重建数据库 {config.Database}，确认继续? (y/N): ");
             var confirm = Console.ReadLine();
@@ -66,11 +57,11 @@ public class RebuildCommand : AsyncCommand<RebuildCommand.Settings>
             var runner = new MigrationRunner(connection, tracker, renderer);
             await runner.RunAsync(config.GetMigrationsPath());
 
-            if (settings.Seed || settings.Examples)
+            if (seed || examples)
             {
-                if (settings.Seed)
+                if (seed)
                     await RunSeedFilesAsync(connection, config.GetSeedsPath("required"), renderer);
-                if (settings.Examples)
+                if (examples)
                     await RunSeedFilesAsync(connection, config.GetSeedsPath("examples"), renderer);
             }
 

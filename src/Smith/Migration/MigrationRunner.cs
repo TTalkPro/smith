@@ -4,9 +4,6 @@ using Smith.Rendering;
 
 namespace Smith.Migration;
 
-/// <summary>
-/// 迁移执行编排器：加载文件、过滤待执行、按序执行、记录结果
-/// </summary>
 public class MigrationRunner
 {
     private readonly NpgsqlConnection _connection;
@@ -20,21 +17,28 @@ public class MigrationRunner
         _renderer = renderer;
     }
 
-    /// <summary>
-    /// 执行迁移：加载文件 → 过滤已执行 → 逐个执行 → 记录结果
-    /// </summary>
-    /// <param name="migrationsPath">迁移文件目录</param>
-    /// <param name="targetVersion">目标版本（null = 全部执行）</param>
-    /// <param name="dryRun">预览模式，不实际执行</param>
-    /// <returns>成功执行的迁移数量</returns>
-    public async Task<int> RunAsync(string migrationsPath, int? targetVersion = null, bool dryRun = false, CancellationToken ct = default)
+    public async Task<int> RunAsync(string migrationsPath, int? targetVersion = null, bool dryRun = false, ScriptType? scriptType = null, CancellationToken ct = default)
     {
+        var detector = new SchemaDetector(_connection);
+        if (await detector.NeedsUpgradeAsync(ct))
+        {
+            var currentSchemaVersion = await detector.DetectCurrentVersionAsync(ct);
+            _renderer.Error($"Schema 版本过旧: {currentSchemaVersion}");
+            _renderer.Error("请先运行: smith upgrade-schema run -d <database>");
+            return -1;
+        }
+
         await _tracker.EnsureTableExistsAsync(ct);
 
-        var currentVersion = await _tracker.GetCurrentVersionAsync(ct);
         var allMigrations = MigrationFile.LoadFromDirectory(migrationsPath);
+        
+        if (scriptType.HasValue)
+        {
+            allMigrations = allMigrations.Where(m => m.Type == scriptType.Value).ToList();
+        }
 
-        // Reason: 只执行版本号大于当前版本的迁移，并可选限制到目标版本
+        var currentVersion = await _tracker.GetCurrentVersionAsync(scriptType, ct);
+
         var pending = allMigrations
             .Where(m => m.Version > currentVersion)
             .Where(m => targetVersion is null || m.Version <= targetVersion)
@@ -42,17 +46,29 @@ public class MigrationRunner
 
         if (pending.Count == 0)
         {
-            _renderer.Info("数据库已是最新版本");
+            var typeLabel = scriptType switch
+            {
+                ScriptType.Migration => "迁移",
+                ScriptType.SeedRequired => "种子数据",
+                _ => "脚本"
+            };
+            _renderer.Info($"数据库{typeLabel}已是最新版本");
             return 0;
         }
 
-        _renderer.Info($"当前版本: {currentVersion}，待执行: {pending.Count} 个迁移");
+        var typeDesc = scriptType switch
+        {
+            ScriptType.Migration => "迁移",
+            ScriptType.SeedRequired => "种子数据",
+            _ => "脚本"
+        };
+        _renderer.Info($"当前版本: {currentVersion}，待执行: {pending.Count} 个{typeDesc}");
 
         if (dryRun)
         {
             _renderer.Warning("预览模式 (dry-run)，不会实际执行");
             foreach (var m in pending)
-                _renderer.Info($"  {m}");
+                _renderer.Info($"  [{m.Type}] {m}");
             return pending.Count;
         }
 
@@ -63,16 +79,13 @@ public class MigrationRunner
             successCount++;
         }
 
-        _renderer.Success($"已成功执行 {successCount} 个迁移");
+        _renderer.Success($"已成功执行 {successCount} 个{typeDesc}");
         return successCount;
     }
 
-    /// <summary>
-    /// 在事务中执行单个迁移
-    /// </summary>
     private async Task RunSingleAsync(MigrationFile migration, CancellationToken ct)
     {
-        _renderer.Info($"执行: {migration}");
+        _renderer.Info($"执行: [{migration.Type}] {migration}");
         var sw = Stopwatch.StartNew();
 
         await using var transaction = await _connection.BeginTransactionAsync(ct);
@@ -80,7 +93,7 @@ public class MigrationRunner
         {
             var sql = migration.GetContent();
             await using var cmd = new NpgsqlCommand(sql, _connection, transaction);
-            cmd.CommandTimeout = 300; // 5 分钟超时
+            cmd.CommandTimeout = 300;
             await cmd.ExecuteNonQueryAsync(ct);
 
             await transaction.CommitAsync(ct);
@@ -96,7 +109,6 @@ public class MigrationRunner
             sw.Stop();
             await transaction.RollbackAsync(ct);
 
-            // Reason: 记录失败但不影响后续操作，让调用者决定是否中止
             await _tracker.RecordFailureAsync(migration, ex.Message, ct);
             _renderer.Error($"  失败: {ex.Message}");
             throw;

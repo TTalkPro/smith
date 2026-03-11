@@ -18,22 +18,51 @@ public class PostgresMigrationTracker : IMigrationTracker
     {
         const string sql = """
             CREATE TABLE IF NOT EXISTS schema_migrations (
-                version         INTEGER PRIMARY KEY,
+                version         INTEGER NOT NULL,
+                script_type    VARCHAR(20) DEFAULT 'Migration',
                 description     VARCHAR(255),
                 script_name     VARCHAR(255),
                 installed_on    TIMESTAMPTZ DEFAULT NOW(),
                 execution_time_ms INTEGER,
                 checksum        VARCHAR(64),
-                success         BOOLEAN DEFAULT TRUE
+                success         BOOLEAN DEFAULT TRUE,
+                PRIMARY KEY (version, script_type)
             )
             """;
         await using var cmd = new NpgsqlCommand(sql, _connection);
         await cmd.ExecuteNonQueryAsync(ct);
+        
+        try
+        {
+            const string alterSql = """
+                ALTER TABLE schema_migrations 
+                ADD COLUMN IF NOT EXISTS script_type VARCHAR(20) DEFAULT 'Migration'
+                """;
+            await using var alterCmd = new NpgsqlCommand(alterSql, _connection);
+            await alterCmd.ExecuteNonQueryAsync(ct);
+        }
+        catch
+        {
+        }
     }
 
     public async Task<int> GetCurrentVersionAsync(CancellationToken ct = default)
     {
         const string sql = "SELECT COALESCE(MAX(version), 0) FROM schema_migrations WHERE success = TRUE";
+        await using var cmd = new NpgsqlCommand(sql, _connection);
+        var result = await cmd.ExecuteScalarAsync(ct);
+        return Convert.ToInt32(result);
+    }
+
+    public async Task<int> GetCurrentVersionAsync(ScriptType? scriptType, CancellationToken ct = default)
+    {
+        if (scriptType is null)
+        {
+            return await GetCurrentVersionAsync(ct);
+        }
+        
+        var typeFilter = scriptType == ScriptType.Migration ? "Migration" : "SeedRequired";
+        var sql = $"SELECT COALESCE(MAX(version), 0) FROM schema_migrations WHERE success = TRUE AND script_type = '{typeFilter}'";
         await using var cmd = new NpgsqlCommand(sql, _connection);
         var result = await cmd.ExecuteScalarAsync(ct);
         return Convert.ToInt32(result);
@@ -52,11 +81,12 @@ public class PostgresMigrationTracker : IMigrationTracker
 
     public async Task RecordAsync(MigrationFile migration, int elapsedMs, CancellationToken ct = default)
     {
-        // Reason: 使用 ON CONFLICT UPDATE 实现幂等记录，重复执行不会报错
+        var scriptType = migration.Type == ScriptType.Migration ? "Migration" : "SeedRequired";
+        
         const string sql = """
-            INSERT INTO schema_migrations (version, description, script_name, execution_time_ms, checksum, success)
-            VALUES ($1, $2, $3, $4, $5, TRUE)
-            ON CONFLICT (version) DO UPDATE SET
+            INSERT INTO schema_migrations (version, script_type, description, script_name, execution_time_ms, checksum, success)
+            VALUES ($1, $2, $3, $4, $5, $6, TRUE)
+            ON CONFLICT (version, script_type) DO UPDATE SET
                 description = EXCLUDED.description,
                 script_name = EXCLUDED.script_name,
                 installed_on = NOW(),
@@ -66,6 +96,7 @@ public class PostgresMigrationTracker : IMigrationTracker
             """;
         await using var cmd = new NpgsqlCommand(sql, _connection);
         cmd.Parameters.AddWithValue(migration.Version);
+        cmd.Parameters.AddWithValue(scriptType);
         cmd.Parameters.AddWithValue(migration.Description);
         cmd.Parameters.AddWithValue(migration.FileName);
         cmd.Parameters.AddWithValue(elapsedMs);
@@ -75,14 +106,16 @@ public class PostgresMigrationTracker : IMigrationTracker
 
     public async Task RecordFailureAsync(MigrationFile migration, string errorMessage, CancellationToken ct = default)
     {
-        // Reason: 失败记录使用 DO NOTHING，避免覆盖已有的成功记录
+        var scriptType = migration.Type == ScriptType.Migration ? "Migration" : "SeedRequired";
+        
         const string sql = """
-            INSERT INTO schema_migrations (version, description, script_name, checksum, success)
-            VALUES ($1, $2, $3, $4, FALSE)
-            ON CONFLICT (version) DO NOTHING
+            INSERT INTO schema_migrations (version, script_type, description, script_name, checksum, success)
+            VALUES ($1, $2, $3, $4, $5, FALSE)
+            ON CONFLICT (version, script_type) DO NOTHING
             """;
         await using var cmd = new NpgsqlCommand(sql, _connection);
         cmd.Parameters.AddWithValue(migration.Version);
+        cmd.Parameters.AddWithValue(scriptType);
         cmd.Parameters.AddWithValue($"FAILED: {errorMessage}");
         cmd.Parameters.AddWithValue(migration.FileName);
         cmd.Parameters.AddWithValue(migration.GetChecksum());

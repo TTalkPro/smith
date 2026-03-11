@@ -1,33 +1,50 @@
-using Spectre.Console.Cli;
-using Smith.Commands.Settings;
+using Smith.Configuration;
 using Smith.Database;
 using Smith.Migration;
 using Smith.Rendering;
 
 namespace Smith.Commands.Migrate;
 
-public class MigrateUpCommand : AsyncCommand<MigrateUpCommand.Settings>
+public static class MigrateUpCommand
 {
-    public class Settings : ConnectionSettings
+    public static async Task<int> ExecuteAsync(
+        string? database, string? host, int? port, string? user, string? password,
+        string? databasePath, bool verbose, int? target, bool dryRun, 
+        bool migrationsOnly, bool seedsOnly)
     {
-        [CommandOption("-t|--target")]
-        public int? Target { get; set; }
+        if (migrationsOnly && seedsOnly)
+        {
+            Console.Error.WriteLine("错误: --migrations-only 和 --seeds-only 不能同时使用");
+            return 1;
+        }
 
-        [CommandOption("--dry-run")]
-        public bool DryRun { get; set; }
-    }
-
-    public override async Task<int> ExecuteAsync(CommandContext context, Settings settings)
-    {
-        var config = settings.BuildConfig();
+        var config = ConfigLoader.Load(cliHost: host, cliPort: port, cliUser: user,
+            cliPassword: password, cliDatabase: database, cliDatabasePath: databasePath,
+            cliVerbose: verbose);
+        
         if (string.IsNullOrEmpty(config.Database))
         {
             Console.Error.WriteLine("错误: 请通过 -d 参数或 SMITH_DATABASE 环境变量指定数据库名称");
             return 1;
         }
 
-        var renderer = new SpectreRenderer();
-        renderer.Title("Smith - 执行迁移");
+        var renderer = new TerminalGuiRenderer();
+        
+        ScriptType? scriptType = null;
+        if (migrationsOnly)
+        {
+            scriptType = ScriptType.Migration;
+            renderer.Title("Smith - 执行迁移 (仅 Migration)");
+        }
+        else if (seedsOnly)
+        {
+            scriptType = ScriptType.SeedRequired;
+            renderer.Title("Smith - 执行种子数据 (仅 Seeds)");
+        }
+        else
+        {
+            renderer.Title("Smith - 执行迁移和种子数据");
+        }
 
         try
         {
@@ -37,7 +54,7 @@ public class MigrateUpCommand : AsyncCommand<MigrateUpCommand.Settings>
             var runner = new MigrationRunner(connection, tracker, renderer);
 
             var migrationsPath = config.GetMigrationsPath();
-            var count = await runner.RunAsync(migrationsPath, settings.Target, settings.DryRun);
+            var count = await runner.RunAsync(migrationsPath, target, dryRun, scriptType);
             return count >= 0 ? 0 : 1;
         }
         catch (Exception ex)

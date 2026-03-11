@@ -1,15 +1,19 @@
-using Spectre.Console.Cli;
-using Smith.Commands.Settings;
+using Smith.Configuration;
 using Smith.Database;
 using Smith.Migration;
 
 namespace Smith.Commands.Status;
 
-public class StatusVersionCommand : AsyncCommand<ConnectionSettings>
+public static class StatusVersionCommand
 {
-    public override async Task<int> ExecuteAsync(CommandContext context, ConnectionSettings settings)
+    public static async Task<int> ExecuteAsync(
+        string? database, string? host, int? port, string? user, string? password,
+        string? databasePath, bool verbose)
     {
-        var config = settings.BuildConfig();
+        var config = ConfigLoader.Load(cliHost: host, cliPort: port, cliUser: user,
+            cliPassword: password, cliDatabase: database, cliDatabasePath: databasePath,
+            cliVerbose: verbose);
+        
         if (string.IsNullOrEmpty(config.Database))
         {
             Console.Error.WriteLine("错误: 请通过 -d 参数或 SMITH_DATABASE 环境变量指定数据库名称");

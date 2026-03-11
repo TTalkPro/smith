@@ -1,22 +1,26 @@
 using System.Diagnostics;
-using Spectre.Console.Cli;
-using Smith.Commands.Settings;
+using Smith.Configuration;
 using Smith.Rendering;
 
 namespace Smith.Commands;
 
-public class ConsoleCommand : AsyncCommand<ConnectionSettings>
+public static class ConsoleCommand
 {
-    public override async Task<int> ExecuteAsync(CommandContext context, ConnectionSettings settings)
+    public static async Task<int> ExecuteAsync(
+        string? database, string? host, int? port, string? user, string? password,
+        string? databasePath, bool verbose)
     {
-        var config = settings.BuildConfig();
+        var config = ConfigLoader.Load(cliHost: host, cliPort: port, cliUser: user,
+            cliPassword: password, cliDatabase: database, cliDatabasePath: databasePath,
+            cliVerbose: verbose);
+        
         if (string.IsNullOrEmpty(config.Database))
         {
             Console.Error.WriteLine("错误: 请通过 -d 参数或 SMITH_DATABASE 环境变量指定数据库名称");
             return 1;
         }
 
-        var renderer = new SpectreRenderer();
+        var renderer = new TerminalGuiRenderer();
         renderer.Info($"连接到 {config.Host}:{config.Port}/{config.Database}...");
 
         var startInfo = new ProcessStartInfo

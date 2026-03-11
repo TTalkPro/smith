@@ -1,29 +1,27 @@
-using Spectre.Console.Cli;
-using Smith.Commands.Settings;
+using Smith.Configuration;
 using Smith.Database;
 using Smith.Migration;
 using Smith.Rendering;
 
 namespace Smith.Commands.Status;
 
-public class StatusHistoryCommand : AsyncCommand<StatusHistoryCommand.Settings>
+public static class StatusHistoryCommand
 {
-    public class Settings : ConnectionSettings
+    public static async Task<int> ExecuteAsync(
+        string? database, string? host, int? port, string? user, string? password,
+        string? databasePath, bool verbose, int limit = 20)
     {
-        [CommandOption("-n|--limit")]
-        public int Limit { get; set; } = 20;
-    }
-
-    public override async Task<int> ExecuteAsync(CommandContext context, Settings settings)
-    {
-        var config = settings.BuildConfig();
+        var config = ConfigLoader.Load(cliHost: host, cliPort: port, cliUser: user,
+            cliPassword: password, cliDatabase: database, cliDatabasePath: databasePath,
+            cliVerbose: verbose);
+        
         if (string.IsNullOrEmpty(config.Database))
         {
             Console.Error.WriteLine("错误: 请通过 -d 参数或 SMITH_DATABASE 环境变量指定数据库名称");
             return 1;
         }
 
-        var renderer = new SpectreRenderer();
+        var renderer = new TerminalGuiRenderer();
         renderer.Title("Smith - 迁移历史");
 
         try
@@ -31,7 +29,7 @@ public class StatusHistoryCommand : AsyncCommand<StatusHistoryCommand.Settings>
             var factory = new NpgsqlConnectionFactory(config);
             await using var connection = await factory.CreateConnectionAsync();
             var tracker = new PostgresMigrationTracker(connection);
-            var history = await tracker.GetHistoryAsync(settings.Limit);
+            var history = await tracker.GetHistoryAsync(limit);
 
             if (history.Count == 0)
             {

@@ -1,29 +1,27 @@
-using Spectre.Console.Cli;
-using Smith.Commands.Settings;
+using Smith.Configuration;
 using Smith.Database;
 using Smith.Migration;
 using Smith.Rendering;
 
 namespace Smith.Commands.Status;
 
-public class StatusSyncCommand : AsyncCommand<StatusSyncCommand.Settings>
+public static class StatusSyncCommand
 {
-    public class Settings : ConnectionSettings
+    public static async Task<int> ExecuteAsync(
+        string? database, string? host, int? port, string? user, string? password,
+        string? databasePath, bool verbose, bool dryRun)
     {
-        [CommandOption("--dry-run")]
-        public bool DryRun { get; set; }
-    }
-
-    public override async Task<int> ExecuteAsync(CommandContext context, Settings settings)
-    {
-        var config = settings.BuildConfig();
+        var config = ConfigLoader.Load(cliHost: host, cliPort: port, cliUser: user,
+            cliPassword: password, cliDatabase: database, cliDatabasePath: databasePath,
+            cliVerbose: verbose);
+        
         if (string.IsNullOrEmpty(config.Database))
         {
             Console.Error.WriteLine("错误: 请通过 -d 参数或 SMITH_DATABASE 环境变量指定数据库名称");
             return 1;
         }
 
-        var renderer = new SpectreRenderer();
+        var renderer = new TerminalGuiRenderer();
         renderer.Title("Smith - 同步迁移状态");
 
         try
@@ -70,9 +68,9 @@ public class StatusSyncCommand : AsyncCommand<StatusSyncCommand.Settings>
                 }
             }
 
-            if (settings.DryRun || result.Synced.Count == 0)
+            if (dryRun || result.Synced.Count == 0)
             {
-                if (settings.DryRun)
+                if (dryRun)
                     renderer.Warning("预览模式，不会实际执行");
                 return 0;
             }

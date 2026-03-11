@@ -1,44 +1,26 @@
-using Spectre.Console.Cli;
-using Smith.Commands.Settings;
+using Smith.Configuration;
 using Smith.Database;
 using Smith.Rendering;
 
 namespace Smith.Commands.Seed;
 
-public class SeedRequiredCommand : AsyncCommand<ConnectionSettings>
-{
-    public override Task<int> ExecuteAsync(CommandContext context, ConnectionSettings settings) =>
-        SeedHelper.RunSeedsAsync(settings, "required", "必需种子数据");
-}
-
-public class SeedExamplesCommand : AsyncCommand<ConnectionSettings>
-{
-    public override Task<int> ExecuteAsync(CommandContext context, ConnectionSettings settings) =>
-        SeedHelper.RunSeedsAsync(settings, "examples", "示例数据");
-}
-
-public class SeedAllCommand : AsyncCommand<ConnectionSettings>
-{
-    public override async Task<int> ExecuteAsync(CommandContext context, ConnectionSettings settings)
-    {
-        var result = await SeedHelper.RunSeedsAsync(settings, "required", "必需种子数据");
-        if (result != 0) return result;
-        return await SeedHelper.RunSeedsAsync(settings, "examples", "示例数据");
-    }
-}
-
 internal static class SeedHelper
 {
-    public static async Task<int> RunSeedsAsync(ConnectionSettings settings, string category, string label)
+    public static async Task<int> RunSeedsAsync(
+        string? database, string? host, int? port, string? user, string? password,
+        string? databasePath, bool verbose, string category, string label)
     {
-        var config = settings.BuildConfig();
+        var config = ConfigLoader.Load(cliHost: host, cliPort: port, cliUser: user,
+            cliPassword: password, cliDatabase: database, cliDatabasePath: databasePath,
+            cliVerbose: verbose);
+        
         if (string.IsNullOrEmpty(config.Database))
         {
             Console.Error.WriteLine("错误: 请通过 -d 参数或 SMITH_DATABASE 环境变量指定数据库名称");
             return 1;
         }
 
-        var renderer = new SpectreRenderer();
+        var renderer = new TerminalGuiRenderer();
         renderer.Title($"Smith - {label}");
 
         try
@@ -78,5 +60,37 @@ internal static class SeedHelper
             renderer.Error(ex.Message);
             return 1;
         }
+    }
+}
+
+public static class SeedRequiredCommand
+{
+    public static async Task<int> ExecuteAsync(
+        string? database, string? host, int? port, string? user, string? password,
+        string? databasePath, bool verbose)
+    {
+        return await SeedHelper.RunSeedsAsync(database, host, port, user, password, databasePath, verbose, "required", "必需种子数据");
+    }
+}
+
+public static class SeedExamplesCommand
+{
+    public static async Task<int> ExecuteAsync(
+        string? database, string? host, int? port, string? user, string? password,
+        string? databasePath, bool verbose)
+    {
+        return await SeedHelper.RunSeedsAsync(database, host, port, user, password, databasePath, verbose, "examples", "示例数据");
+    }
+}
+
+public static class SeedAllCommand
+{
+    public static async Task<int> ExecuteAsync(
+        string? database, string? host, int? port, string? user, string? password,
+        string? databasePath, bool verbose)
+    {
+        var result = await SeedHelper.RunSeedsAsync(database, host, port, user, password, databasePath, verbose, "required", "必需种子数据");
+        if (result != 0) return result;
+        return await SeedHelper.RunSeedsAsync(database, host, port, user, password, databasePath, verbose, "examples", "示例数据");
     }
 }

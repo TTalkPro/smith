@@ -5,29 +5,55 @@ using System.Text.RegularExpressions;
 namespace Smith.Migration;
 
 /// <summary>
+/// 脚本类型：区分 Migration 和 Seed 文件
+/// </summary>
+public enum ScriptType
+{
+    /// <summary>标准数据库迁移 (DDL)</summary>
+    Migration,
+    
+    /// <summary>必需种子数据 (参考数据)</summary>
+    SeedRequired,
+    
+    /// <summary>示例种子数据 (演示/测试数据)</summary>
+    SeedExample
+}
+
+/// <summary>
 /// 迁移文件模型：解析文件名、计算校验和、加载 SQL 内容
+/// 支持标准 Migration (001_xxx.sql) 和 Seed (S001_xxx.sql) 格式
 /// </summary>
 public partial class MigrationFile : IComparable<MigrationFile>
 {
     // Reason: 匹配 "001_create_xxx.sql" 格式，提取版本号和名称部分
     [GeneratedRegex(@"^(\d+)_(.+)\.sql$", RegexOptions.IgnoreCase)]
-    private static partial Regex FileNamePattern();
+    private static partial Regex MigrationFileNamePattern();
+    
+    // Reason: 匹配 "S001_xxx.sql" 格式，提取 S 前缀、版本号和名称部分
+    [GeneratedRegex(@"^S(\d{3})_(.+)\.sql$", RegexOptions.IgnoreCase)]
+    private static partial Regex SeedFileNamePattern();
 
     public string FilePath { get; }
     public string FileName { get; }
     public int Version { get; }
     public string Name { get; }
     public string Description { get; }
+    
+    /// <summary>
+    /// 脚本类型：Migration 或 Seed
+    /// </summary>
+    public ScriptType Type { get; }
 
     private string? _content;
     private string? _checksum;
 
-    private MigrationFile(string filePath, int version, string name)
+    private MigrationFile(string filePath, int version, string name, ScriptType type)
     {
         FilePath = filePath;
         FileName = Path.GetFileName(filePath);
         Version = version;
         Name = name;
+        Type = type;
         Description = GenerateDescription(name);
     }
 
@@ -37,13 +63,26 @@ public partial class MigrationFile : IComparable<MigrationFile>
     public static MigrationFile? Parse(string filePath)
     {
         var fileName = Path.GetFileName(filePath);
-        var match = FileNamePattern().Match(fileName);
-        if (!match.Success)
-            return null;
-
-        var version = int.Parse(match.Groups[1].Value);
-        var name = match.Groups[2].Value;
-        return new MigrationFile(filePath, version, name);
+        
+        // 首先尝试匹配标准 Migration 格式: 001_xxx.sql
+        var migrationMatch = MigrationFileNamePattern().Match(fileName);
+        if (migrationMatch.Success)
+        {
+            var version = int.Parse(migrationMatch.Groups[1].Value);
+            var name = migrationMatch.Groups[2].Value;
+            return new MigrationFile(filePath, version, name, ScriptType.Migration);
+        }
+        
+        // 然后尝试匹配 Seed 格式: S001_xxx.sql
+        var seedMatch = SeedFileNamePattern().Match(fileName);
+        if (seedMatch.Success)
+        {
+            var version = int.Parse(seedMatch.Groups[1].Value);
+            var name = seedMatch.Groups[2].Value;
+            return new MigrationFile(filePath, version, name, ScriptType.SeedRequired);
+        }
+        
+        return null;
     }
 
     /// <summary>

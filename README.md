@@ -5,8 +5,8 @@ C# TUI PostgreSQL 数据库管理工具，专注于迁移管理。
 ## 技术栈
 
 - C# / .NET 10.0
-- Spectre.Console.Cli 0.50.0（CLI 框架 + TUI 渲染）
-- Npgsql 10.0.1（PostgreSQL 驱动）
+- **Terminal.Gui v2.0.0** (TUI 渲染) - AOT 兼容
+- **System.CommandLine** (CLI 框架) - Microsoft 官方，- Npgsql 10.0.1（PostgreSQL 驱动）
 - xUnit + FluentAssertions + Moq（测试）
 
 ## 安装
@@ -53,9 +53,10 @@ smith --help
 
 **构建优势：**
 - 独立单文件二进制，无需安装 .NET Runtime
-- 包含所有依赖（.NET Runtime、NPGSQL等）
+- 包含所有依赖（.NET Runtime、 NPGSQL等）
 - 一次构建，跨环境运行（Linux x64）
-- 二进制大小约 74MB
+- 二进制大小约 106MB
+- **AOT 兼容**: 使用 Terminal.Gui + System.CommandLine， 支持 AOT 编译
 
 ## 快速开始
 

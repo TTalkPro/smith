@@ -177,11 +177,23 @@ smith console -d owl_dev
 database/
 ├── migrations/          # 迁移文件（001_xxx.sql, 002_xxx.sql, ...）
 └── seeds/
-    ├── required/        # 必需种子数据
-    └── examples/        # 示例数据
+    ├── required/        # 必需种子数据（S001_xxx.sql, S002_xxx.sql, ...）
+    └── examples/        # 示例数据（S001_xxx.sql, S002_xxx.sql, ...）
 ```
 
-迁移文件命名格式：`{版本号}_{描述}.sql`，例如 `001_create_users_table.sql`。
+**命名规范：**
+- 迁移文件：`{版本号}_{描述}.sql`，例如 `001_create_users_table.sql`
+- 种子文件：`S{版本号}_{描述}.sql`，例如 `S001_roles.sql`、`S002_permissions.sql`
+
+**迁移文件 vs 种子文件：**
+
+| | 迁移文件 (migrations) | 种子文件 (seeds) |
+|---|---|---|
+| 用途 | DDL 结构变更（建表、加列、索引等） | DML 数据填充（角色、权限、配置等） |
+| 命名 | `001_xxx.sql` | `S001_xxx.sql` |
+| 执行记录 | 记录到 `schema_migrations` 表，已执行的会跳过 | 不记录，每次执行都会重新运行 |
+| 幂等性 | 无需幂等（只执行一次） | 需自行保证幂等（建议使用 `INSERT ... ON CONFLICT DO NOTHING`） |
+| 执行方式 | `smith migrate up` | `smith seed required` / `smith seed examples` |
 
 ## 迁移同步
 

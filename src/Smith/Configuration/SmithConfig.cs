@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Smith.Database;
 
 namespace Smith.Configuration;
 
@@ -20,6 +21,7 @@ public partial class SmithConfig
             throw new ArgumentException($"数据库名称包含非法字符: {name}（只允许字母、数字和下划线）");
     }
 
+    public DatabaseDriver Driver { get; set; } = DatabaseDriver.PostgreSQL;
     public string Host { get; set; } = "localhost";
     public int Port { get; set; } = 5432;
     public string User { get; set; } = "postgres";
@@ -29,12 +31,15 @@ public partial class SmithConfig
     public bool Verbose { get; set; }
 
     /// <summary>
-    /// 构建 Npgsql 连接字符串
+    /// 构建连接字符串（根据 Driver 自动选择格式）
     /// </summary>
     public string GetConnectionString()
     {
         if (string.IsNullOrEmpty(Database))
             throw new InvalidOperationException("数据库名称未指定");
+
+        if (Driver == DatabaseDriver.Sqlite)
+            return $"Data Source={Database}";
 
         var builder = new Npgsql.NpgsqlConnectionStringBuilder
         {

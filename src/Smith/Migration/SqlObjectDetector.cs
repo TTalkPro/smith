@@ -42,17 +42,20 @@ public static partial class SqlObjectDetector
         var cleanSql = StripComments(sql);
         var objects = new List<DatabaseObject>();
 
-        objects.AddRange(ExtractTables(cleanSql));
-        objects.AddRange(ExtractFunctions(cleanSql));
-        objects.AddRange(ExtractExtensions(cleanSql));
-        objects.AddRange(ExtractIndexes(cleanSql));
-        objects.AddRange(ExtractTriggers(cleanSql));
-        objects.AddRange(ExtractViews(cleanSql));
+        objects.AddRange(ExtractWithSchema(cleanSql, CreateTablePattern(), DatabaseObjectType.Table));
+        objects.AddRange(ExtractWithSchema(cleanSql, CreateFunctionPattern(), DatabaseObjectType.Function));
+        objects.AddRange(ExtractSimple(cleanSql, CreateExtensionPattern(), DatabaseObjectType.Extension));
+        objects.AddRange(ExtractSimple(cleanSql, CreateIndexPattern(), DatabaseObjectType.Index));
+        objects.AddRange(ExtractSimple(cleanSql, CreateTriggerPattern(), DatabaseObjectType.Trigger));
+        objects.AddRange(ExtractWithSchema(cleanSql, CreateViewPattern(), DatabaseObjectType.View));
 
         // Reason: 去重，同一对象可能在不同的 CREATE 语句中出现（如 IF NOT EXISTS）
         return objects.DistinctBy(o => o.ToString()).ToList();
     }
 
+    /// <summary>
+    /// 移除 SQL 中的行注释和块注释
+    /// </summary>
     private static string StripComments(string sql)
     {
         var result = LineCommentPattern().Replace(sql, "");
@@ -60,39 +63,22 @@ public static partial class SqlObjectDetector
         return result;
     }
 
-    private static IEnumerable<DatabaseObject> ExtractTables(string sql)
-    {
-        return CreateTablePattern().Matches(sql).Select(m =>
-            new DatabaseObject(DatabaseObjectType.Table, m.Groups[2].Value, m.Groups[1].Success ? m.Groups[1].Value : "public"));
-    }
+    /// <summary>
+    /// 从 SQL 中提取带 Schema 前缀的对象（表、函数、视图）
+    /// 匹配模式中 Group[1] 为 schema，Group[2] 为对象名
+    /// </summary>
+    private static IEnumerable<DatabaseObject> ExtractWithSchema(
+        string sql, Regex pattern, DatabaseObjectType type) =>
+        pattern.Matches(sql).Select(m =>
+            new DatabaseObject(type, m.Groups[2].Value,
+                m.Groups[1].Success ? m.Groups[1].Value : "public"));
 
-    private static IEnumerable<DatabaseObject> ExtractFunctions(string sql)
-    {
-        return CreateFunctionPattern().Matches(sql).Select(m =>
-            new DatabaseObject(DatabaseObjectType.Function, m.Groups[2].Value, m.Groups[1].Success ? m.Groups[1].Value : "public"));
-    }
-
-    private static IEnumerable<DatabaseObject> ExtractExtensions(string sql)
-    {
-        return CreateExtensionPattern().Matches(sql).Select(m =>
-            new DatabaseObject(DatabaseObjectType.Extension, m.Groups[1].Value));
-    }
-
-    private static IEnumerable<DatabaseObject> ExtractIndexes(string sql)
-    {
-        return CreateIndexPattern().Matches(sql).Select(m =>
-            new DatabaseObject(DatabaseObjectType.Index, m.Groups[1].Value));
-    }
-
-    private static IEnumerable<DatabaseObject> ExtractTriggers(string sql)
-    {
-        return CreateTriggerPattern().Matches(sql).Select(m =>
-            new DatabaseObject(DatabaseObjectType.Trigger, m.Groups[1].Value));
-    }
-
-    private static IEnumerable<DatabaseObject> ExtractViews(string sql)
-    {
-        return CreateViewPattern().Matches(sql).Select(m =>
-            new DatabaseObject(DatabaseObjectType.View, m.Groups[2].Value, m.Groups[1].Success ? m.Groups[1].Value : "public"));
-    }
+    /// <summary>
+    /// 从 SQL 中提取无 Schema 前缀的对象（扩展、索引、触发器）
+    /// 匹配模式中 Group[1] 为对象名
+    /// </summary>
+    private static IEnumerable<DatabaseObject> ExtractSimple(
+        string sql, Regex pattern, DatabaseObjectType type) =>
+        pattern.Matches(sql).Select(m =>
+            new DatabaseObject(type, m.Groups[1].Value));
 }

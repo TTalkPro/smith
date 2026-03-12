@@ -1,3 +1,4 @@
+using System.Data.Common;
 using Npgsql;
 using Smith.Configuration;
 
@@ -15,14 +16,16 @@ public class NpgsqlConnectionFactory : IConnectionFactory
         _config = config;
     }
 
-    public async Task<NpgsqlConnection> CreateConnectionAsync(CancellationToken ct = default)
+    /// <summary>创建并打开 PostgreSQL 数据库连接</summary>
+    public async Task<DbConnection> CreateConnectionAsync(CancellationToken ct = default)
     {
         var conn = new NpgsqlConnection(_config.GetConnectionString());
         await conn.OpenAsync(ct);
         return conn;
     }
 
-    public async Task<NpgsqlConnection> CreateAdminConnectionAsync(CancellationToken ct = default)
+    /// <summary>创建并打开到 postgres 管理数据库的连接</summary>
+    public async Task<DbConnection> CreateAdminConnectionAsync(CancellationToken ct = default)
     {
         var conn = new NpgsqlConnection(_config.GetAdminConnectionString());
         await conn.OpenAsync(ct);

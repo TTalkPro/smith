@@ -14,6 +14,7 @@ public class PostgresSchemaInspector : ISchemaInspector
         _connection = connection;
     }
 
+    /// <summary>检查表是否存在</summary>
     public async Task<bool> TableExistsAsync(string name, string schema = "public", CancellationToken ct = default)
     {
         const string sql = """
@@ -25,6 +26,7 @@ public class PostgresSchemaInspector : ISchemaInspector
         return await QueryBoolAsync(sql, schema, name, ct);
     }
 
+    /// <summary>检查函数是否存在</summary>
     public async Task<bool> FunctionExistsAsync(string name, string schema = "public", CancellationToken ct = default)
     {
         const string sql = """
@@ -37,6 +39,7 @@ public class PostgresSchemaInspector : ISchemaInspector
         return await QueryBoolAsync(sql, schema, name, ct);
     }
 
+    /// <summary>检查扩展是否存在</summary>
     public async Task<bool> ExtensionExistsAsync(string name, CancellationToken ct = default)
     {
         const string sql = "SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = $1)";
@@ -46,6 +49,7 @@ public class PostgresSchemaInspector : ISchemaInspector
         return result is bool b && b;
     }
 
+    /// <summary>检查索引是否存在</summary>
     public async Task<bool> IndexExistsAsync(string name, string schema = "public", CancellationToken ct = default)
     {
         const string sql = """
@@ -57,6 +61,7 @@ public class PostgresSchemaInspector : ISchemaInspector
         return await QueryBoolAsync(sql, schema, name, ct);
     }
 
+    /// <summary>检查触发器是否存在</summary>
     public async Task<bool> TriggerExistsAsync(string name, string schema = "public", CancellationToken ct = default)
     {
         const string sql = """
@@ -70,6 +75,7 @@ public class PostgresSchemaInspector : ISchemaInspector
         return await QueryBoolAsync(sql, schema, name, ct);
     }
 
+    /// <summary>检查视图是否存在（含物化视图）</summary>
     public async Task<bool> ViewExistsAsync(string name, string schema = "public", CancellationToken ct = default)
     {
         const string sql = """
@@ -82,6 +88,7 @@ public class PostgresSchemaInspector : ISchemaInspector
         return await QueryBoolAsync(sql, schema, name, ct);
     }
 
+    /// <summary>根据对象类型分发到对应的检查方法</summary>
     public async Task<bool> ObjectExistsAsync(DatabaseObject obj, CancellationToken ct = default)
     {
         return obj.Type switch
@@ -96,6 +103,7 @@ public class PostgresSchemaInspector : ISchemaInspector
         };
     }
 
+    /// <summary>获取 public schema 中的用户表数量</summary>
     public async Task<int> GetTableCountAsync(CancellationToken ct = default)
     {
         const string sql = """
@@ -107,6 +115,7 @@ public class PostgresSchemaInspector : ISchemaInspector
         return Convert.ToInt32(result);
     }
 
+    /// <summary>通用的带 schema 和 name 参数的布尔查询</summary>
     private async Task<bool> QueryBoolAsync(string sql, string schema, string name, CancellationToken ct)
     {
         await using var cmd = new NpgsqlCommand(sql, _connection);

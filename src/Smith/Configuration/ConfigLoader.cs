@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Configuration;
+using Smith.Database;
 
 namespace Smith.Configuration;
 
@@ -56,25 +57,60 @@ public static class ConfigLoader
             Verbose = cliVerbose
         };
 
+        config.Driver = DetectDriver(
+            GetEnv("DRIVER") ?? jsonConfig?["driver"],
+            config.Database);
+
         return config;
     }
 
+    /// <summary>
+    /// 自动检测数据库驱动类型：优先使用显式指定，否则根据文件扩展名推断
+    /// </summary>
+    private static DatabaseDriver DetectDriver(string? explicitDriver, string? database)
+    {
+        if (explicitDriver != null)
+        {
+            return explicitDriver.ToLower() switch
+            {
+                "sqlite" => DatabaseDriver.Sqlite,
+                "postgres" or "postgresql" => DatabaseDriver.PostgreSQL,
+                _ => DatabaseDriver.PostgreSQL
+            };
+        }
+
+        if (database != null &&
+            (database.EndsWith(".db", StringComparison.OrdinalIgnoreCase) ||
+             database.EndsWith(".sqlite", StringComparison.OrdinalIgnoreCase) ||
+             database.EndsWith(".sqlite3", StringComparison.OrdinalIgnoreCase) ||
+             database == ":memory:"))
+        {
+            return DatabaseDriver.Sqlite;
+        }
+
+        return DatabaseDriver.PostgreSQL;
+    }
+
+    /// <summary>获取 SMITH_ 前缀的环境变量</summary>
     private static string? GetEnv(string name)
     {
         return Environment.GetEnvironmentVariable($"{EnvPrefix}{name}");
     }
 
+    /// <summary>解析整数类型的环境变量</summary>
     private static int? ParseIntEnv(string name)
     {
         var value = GetEnv(name);
         return int.TryParse(value, out var result) ? result : null;
     }
 
+    /// <summary>安全解析整数字符串</summary>
     private static int? ParseInt(string? value)
     {
         return int.TryParse(value, out var result) ? result : null;
     }
 
+    /// <summary>从当前目录加载 smith.json 配置文件</summary>
     private static IConfigurationSection? LoadJsonConfig()
     {
         var configPath = Path.Combine(Directory.GetCurrentDirectory(), "smith.json");

@@ -1,68 +1,51 @@
-using Smith.Configuration;
-using Smith.Database;
 using Smith.Migration;
-using Smith.Rendering;
 
 namespace Smith.Commands.Migrate;
 
+/// <summary>
+/// 执行待处理的迁移和/或种子数据脚本
+/// </summary>
 public static class MigrateUpCommand
 {
-    public static async Task<int> ExecuteAsync(
+    public static Task<int> ExecuteAsync(
         string? database, string? host, int? port, string? user, string? password,
-        string? databasePath, bool verbose, int? target, bool dryRun, 
+        string? databasePath, bool verbose, int? target, bool dryRun,
         bool migrationsOnly, bool seedsOnly)
     {
         if (migrationsOnly && seedsOnly)
         {
             Console.Error.WriteLine("错误: --migrations-only 和 --seeds-only 不能同时使用");
-            return 1;
+            return Task.FromResult(1);
         }
 
-        var config = ConfigLoader.Load(cliHost: host, cliPort: port, cliUser: user,
-            cliPassword: password, cliDatabase: database, cliDatabasePath: databasePath,
-            cliVerbose: verbose);
-        
-        if (string.IsNullOrEmpty(config.Database))
-        {
-            Console.Error.WriteLine("错误: 请通过 -d 参数或 SMITH_DATABASE 环境变量指定数据库名称");
-            return 1;
-        }
+        return CommandContext.RunAsync(database, host, port, user, password, databasePath, verbose,
+            async ctx =>
+            {
+                var scriptType = DetermineScriptType(migrationsOnly, seedsOnly);
+                ctx.Renderer.Title($"Smith - {GetTitle(scriptType)}");
 
-        var renderer = new TerminalGuiRenderer();
-        
-        ScriptType? scriptType = null;
-        if (migrationsOnly)
-        {
-            scriptType = ScriptType.Migration;
-            renderer.Title("Smith - 执行迁移 (仅 Migration)");
-        }
-        else if (seedsOnly)
-        {
-            scriptType = ScriptType.SeedRequired;
-            renderer.Title("Smith - 执行种子数据 (仅 Seeds)");
-        }
-        else
-        {
-            renderer.Title("Smith - 执行迁移和种子数据");
-        }
-
-        try
-        {
-            var factory = new NpgsqlConnectionFactory(config);
-            await using var connection = await factory.CreateConnectionAsync();
-            var tracker = new PostgresMigrationTracker(connection);
-            var runner = new MigrationRunner(connection, tracker, renderer);
-
-            var migrationsPath = config.GetMigrationsPath();
-            var count = await runner.RunAsync(migrationsPath, target, dryRun, scriptType);
-            return count >= 0 ? 0 : 1;
-        }
-        catch (Exception ex)
-        {
-            renderer.Error(ex.Message);
-            if (config.Verbose)
-                renderer.Error(ex.StackTrace ?? "");
-            return 1;
-        }
+                var connection = await ctx.GetConnectionAsync();
+                var runner = ctx.CreateMigrationRunner(connection);
+                var count = await runner.RunAsync(ctx.Config.GetMigrationsPath(), target, dryRun, scriptType);
+                return count >= 0 ? 0 : 1;
+            });
     }
+
+    /// <summary>
+    /// 根据命令行标志确定要执行的脚本类型
+    /// </summary>
+    private static ScriptType? DetermineScriptType(bool migrationsOnly, bool seedsOnly) =>
+        migrationsOnly ? ScriptType.Migration :
+        seedsOnly ? ScriptType.SeedRequired :
+        null;
+
+    /// <summary>
+    /// 根据脚本类型生成命令标题
+    /// </summary>
+    private static string GetTitle(ScriptType? scriptType) => scriptType switch
+    {
+        ScriptType.Migration => "执行迁移 (仅 Migration)",
+        ScriptType.SeedRequired => "执行种子数据 (仅 Seeds)",
+        _ => "执行迁移和种子数据"
+    };
 }

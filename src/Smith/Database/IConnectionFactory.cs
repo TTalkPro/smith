@@ -1,4 +1,4 @@
-using Npgsql;
+using System.Data.Common;
 
 namespace Smith.Database;
 
@@ -10,10 +10,10 @@ public interface IConnectionFactory
     /// <summary>
     /// 创建并打开一个数据库连接
     /// </summary>
-    Task<NpgsqlConnection> CreateConnectionAsync(CancellationToken ct = default);
+    Task<DbConnection> CreateConnectionAsync(CancellationToken ct = default);
 
     /// <summary>
-    /// 创建并打开到 postgres 管理数据库的连接
+    /// 创建并打开到管理数据库的连接（PostgreSQL: postgres 库，SQLite: 同一连接）
     /// </summary>
-    Task<NpgsqlConnection> CreateAdminConnectionAsync(CancellationToken ct = default);
+    Task<DbConnection> CreateAdminConnectionAsync(CancellationToken ct = default);
 }

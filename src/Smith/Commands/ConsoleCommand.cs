@@ -1,46 +1,60 @@
 using System.Diagnostics;
-using Smith.Configuration;
-using Smith.Rendering;
+using Smith.Database;
 
 namespace Smith.Commands;
 
+/// <summary>
+/// 打开数据库交互式终端（PostgreSQL: psql，SQLite: sqlite3）
+/// </summary>
 public static class ConsoleCommand
 {
-    public static async Task<int> ExecuteAsync(
+    public static Task<int> ExecuteAsync(
         string? database, string? host, int? port, string? user, string? password,
-        string? databasePath, bool verbose)
+        string? databasePath, bool verbose) =>
+        CommandContext.RunAsync(database, host, port, user, password, databasePath, verbose,
+            async ctx =>
+            {
+                var startInfo = BuildProcessStartInfo(ctx);
+                var toolName = ctx.Config.Driver == DatabaseDriver.Sqlite ? "sqlite3" : "psql";
+
+                var process = Process.Start(startInfo);
+                if (process is null)
+                {
+                    ctx.Renderer.Error($"无法启动 {toolName}，请确认已安装");
+                    return 1;
+                }
+
+                await process.WaitForExitAsync();
+                return process.ExitCode;
+            });
+
+    /// <summary>
+    /// 根据数据库类型构建对应的交互终端启动参数
+    /// </summary>
+    private static ProcessStartInfo BuildProcessStartInfo(CommandContext ctx)
     {
-        var config = ConfigLoader.Load(cliHost: host, cliPort: port, cliUser: user,
-            cliPassword: password, cliDatabase: database, cliDatabasePath: databasePath,
-            cliVerbose: verbose);
-        
-        if (string.IsNullOrEmpty(config.Database))
+        if (ctx.Config.Driver == DatabaseDriver.Sqlite)
         {
-            Console.Error.WriteLine("错误: 请通过 -d 参数或 SMITH_DATABASE 环境变量指定数据库名称");
-            return 1;
+            ctx.Renderer.Info($"连接到 SQLite: {ctx.Config.Database}...");
+            return new ProcessStartInfo
+            {
+                FileName = "sqlite3",
+                Arguments = ctx.Config.Database!,
+                UseShellExecute = false,
+            };
         }
 
-        var renderer = new TerminalGuiRenderer();
-        renderer.Info($"连接到 {config.Host}:{config.Port}/{config.Database}...");
-
+        ctx.Renderer.Info($"连接到 {ctx.Config.Host}:{ctx.Config.Port}/{ctx.Config.Database}...");
         var startInfo = new ProcessStartInfo
         {
             FileName = "psql",
-            Arguments = $"-h {config.Host} -p {config.Port} -U {config.User} -d {config.Database}",
+            Arguments = $"-h {ctx.Config.Host} -p {ctx.Config.Port} -U {ctx.Config.User} -d {ctx.Config.Database}",
             UseShellExecute = false,
         };
 
-        if (!string.IsNullOrEmpty(config.Password))
-            startInfo.Environment["PGPASSWORD"] = config.Password;
+        if (!string.IsNullOrEmpty(ctx.Config.Password))
+            startInfo.Environment["PGPASSWORD"] = ctx.Config.Password;
 
-        var process = Process.Start(startInfo);
-        if (process is null)
-        {
-            renderer.Error("无法启动 psql，请确认已安装 PostgreSQL 客户端");
-            return 1;
-        }
-
-        await process.WaitForExitAsync();
-        return process.ExitCode;
+        return startInfo;
     }
 }

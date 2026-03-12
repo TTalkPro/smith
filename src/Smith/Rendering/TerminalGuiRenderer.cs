@@ -1,12 +1,10 @@
 namespace Smith.Rendering;
 
 /// <summary>
-/// Terminal.Gui 彩色输出实现 - AOT 兼容
-/// 提供基本的彩色输出，使用 ANSI 转义序列
+/// 彩色终端输出实现，使用 ANSI 转义序列渲染
 /// </summary>
 public class TerminalGuiRenderer : IConsoleRenderer
 {
-    // ANSI 颜色代码
     private const string Green = "\u001b[32m";
     private const string Red = "\u001b[31m";
     private const string Yellow = "\u001b[33m";
@@ -39,52 +37,65 @@ public class TerminalGuiRenderer : IConsoleRenderer
         OutputLine($"  {key.PadLeft(keyWidth)}  {value}");
     }
 
+    /// <summary>
+    /// 输出格式化表格，自动计算列宽对齐
+    /// </summary>
     public void Table(string[] headers, List<string[]> rows)
     {
-        // 计算每列宽度
-        var colWidths = new int[headers.Length];
-        for (int i = 0; i < headers.Length; i++)
-        {
-            colWidths[i] = headers[i].Length;
-        }
-
-        foreach (var row in rows)
-        {
-            for (int i = 0; i < row.Length && i < colWidths.Length; i++)
-            {
-                colWidths[i] = Math.Max(colWidths[i], row[i].Length);
-            }
-        }
-
-        // 打印表头
-        var headerLine = "  ";
-        for (int i = 0; i < headers.Length; i++)
-        {
-            headerLine += $"{Bold}{White}{headers[i].PadRight(colWidths[i] + 2)}{Reset}";
-        }
-        OutputLine(headerLine);
-
-        // 打印分隔线
-        var separator = "  ";
-        for (int i = 0; i < headers.Length; i++)
-        {
-            separator += new string('-', colWidths[i]) + "  ";
-        }
-        OutputLine(separator);
-
-        // 打印数据行
-        foreach (var row in rows)
-        {
-            var rowLine = "  ";
-            for (int i = 0; i < row.Length; i++)
-            {
-                rowLine += row[i].PadRight(colWidths[i] + 2);
-            }
-            OutputLine(rowLine);
-        }
+        var colWidths = CalculateColumnWidths(headers, rows);
+        PrintHeaders(headers, colWidths);
+        PrintSeparator(colWidths);
+        PrintRows(rows, colWidths);
     }
 
     public void NewLine() => OutputLine("");
+
+    /// <summary>
+    /// 提示用户确认操作，等待输入 y/Y 表示同意
+    /// </summary>
+    public bool Confirm(string message)
+    {
+        Console.Write($"{message} (y/N): ");
+        var input = Console.ReadLine();
+        return input?.Equals("y", StringComparison.OrdinalIgnoreCase) == true;
+    }
+
+    /// <summary>
+    /// 计算表格各列的显示宽度
+    /// </summary>
+    private static int[] CalculateColumnWidths(string[] headers, List<string[]> rows)
+    {
+        var widths = headers.Select(h => h.Length).ToArray();
+        foreach (var row in rows)
+        {
+            for (int i = 0; i < row.Length && i < widths.Length; i++)
+                widths[i] = Math.Max(widths[i], row[i].Length);
+        }
+        return widths;
+    }
+
+    private void PrintHeaders(string[] headers, int[] widths)
+    {
+        var line = "  " + string.Join("", headers.Select((h, i) =>
+            $"{Bold}{White}{h.PadRight(widths[i] + 2)}{Reset}"));
+        OutputLine(line);
+    }
+
+    private void PrintSeparator(int[] widths)
+    {
+        var line = "  " + string.Join("", widths.Select(w => new string('-', w) + "  "));
+        OutputLine(line);
+    }
+
+    private void PrintRows(List<string[]> rows, int[] widths)
+    {
+        foreach (var row in rows)
+        {
+            var line = "  " + string.Join("", row.Select((cell, i) =>
+                cell.PadRight(widths[i] + 2)));
+            OutputLine(line);
+        }
+    }
 
     private static void OutputLine(string text)
     {
